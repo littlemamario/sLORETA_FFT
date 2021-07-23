@@ -1,0 +1,93 @@
+%function X=simulate_fft10(R,fs)%R的数据格式为seg*63*length
+channel=55;
+seg=1;
+fs=250;
+Nepoch = 1;
+epochpoint=1000;%////1023
+sweeppoint=epochpoint*Nepoch;% 每段sweep的长度
+av_N = 1;% average times
+
+%读取文件，并设置bandpass滤波器的参数
+
+
+n_col = 1;% 对应数据矩阵列数 
+X = zeros(1,channel);
+X_temp = zeros(1,channel);
+averagenew = zeros(1,sweeppoint);
+Fy4 = zeros(1,sweeppoint);
+FY4 = zeros(1,sweeppoint);
+Amp = zeros(1,channel);  
+pha = zeros(1,channel);
+a = zeros(1,channel);  
+b = zeros(1,channel);
+length=1000;
+for c = 1:seg
+    temp=R(c,:,:);
+    x=reshape(temp,channel,length);
+    x=reshape(x,channel,length);
+%     for i=1:channel  
+% %%bandp
+% %         x(i,:) = bandp( x(i,:),35,45,30,50,1,20,fs );
+%         [f1,f3,fsl,fsh,rp,rs]=deal(0.5,4,0.1,50,1,20);%Delta(0.5-4)Theta(4-8)Alpha(8-12)
+%                                                    %Beta1(13-17)Beta2(17-25)Beta3(25-30)Gama(30-45)
+%         wp1=2*pi*f1/fs;
+%         wp3=2*pi*f3/fs;
+%         wsl=2*pi*fsl/fs;
+%         wsh=2*pi*fsh/fs;
+%         wp=[wp1 wp3];
+%         ws=[wsl wsh];
+% %
+% % 设计切比雪夫滤波器；
+%         [n,wn]=cheb1ord(ws/pi,wp/pi,rp,rs);
+%         [bz1,az1]=cheby1(n,rp,wp/pi);
+%         [h,w]=freqz(bz1,az1,256,fs);
+%         h=20*log10(abs(h));
+%  %figure;plot(w,h);title('所设计滤波器的通带曲线');grid on;
+%         x(i,:)=filtfilt(bz1,az1,x(i,:));
+%     end
+    
+    
+%%artifactremove
+%     [ar_x, kcount] = artifactremove(x,epochpoint);
+    Maxam=500;% the value of the voltage is considered invalid when the maximum is smaller than 80uv
+    Nsweep=fix(size(x,2)/epochpoint);% Nsweep is the number of sweep
+    
+    k=1;
+    for i=1:Nsweep% i is the channel number
+            if max(abs(x(:,(epochpoint*(i-1)+1):epochpoint*i)))>Maxam
+            else
+                ar_x(:,(epochpoint*(k-1)+1):epochpoint*k)=x(:,(epochpoint*(i-1)+1):epochpoint*i);%discard the epochpoint whose amplitude lower than 40uv
+                k=k+1;
+            end
+    end
+    kcount = k-1;
+    
+    N3 = sweeppoint;
+    for i=1:channel         
+        xxsweep=ar_x(i,:);%截取相应数据段平均
+        xxsweep=reshape(xxsweep,N3,av_N);
+        xxsweep=xxsweep';
+        averagenew(i,:)=mean(xxsweep,1);
+        
+%         Ham_win=hamming(N3);
+%         averagenew(i,:)=averagenew(i,:).*Ham_win';
+        
+        Fy4(i,:)=fft(averagenew(i,:),N3);   %对平均后的数据进行傅立叶变换
+        FY4(i,:)=abs(Fy4(i,:))/(N3/2);
+        n4=floor(N3/2); %对Fy求采样点数的一半
+        FF4=(0:n4)*fs/N3; %进行对应的频率转换,时域上的采样点数,      
+        
+        Amp(i) = FY4(i,5);%根据脑电节律改频点位置
+        pha(i) = angle(Fy4(i,5));  
+        a(i) = Amp(i)*cos(pha(i));
+        b(i) = Amp(i)*sin(pha(i));
+    end
+    
+    j = sqrt(-1);
+    X_temp = a + j*b;
+    X(n_col,:) = X_temp;  
+    n_col = n_col + 1;
+end
+
+%end
+
